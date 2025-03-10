@@ -40,27 +40,33 @@ In this task, you will find out which municipality in Denmark has the most Vikin
 ```{r monuments-dk, eval=FALSE}
 
 # Load the monuments into R
-monuments <- read_sf(" _________")
+monuments <- read_sf("../data/anlaeg_all_25832.shp")
 
+viking <- read_sf("../data/viking.geojson")
+viking2 <- readRDS("../data/viking.rds")
+plot(viking2$geometry)
 
 # Check the periodisation and type of the monuments
-_____(monuments$datering)
-_____(monuments$anlaegsbet)
+unique(monuments$datering)
+unique(monuments$anlaegsbet)
 
 # Filter Viking-era finds
 viking <- monuments %>% 
-  _____(___________)
+  filter(datering == "Vikingetid")
+
+viking
 
 # Prepare municipalities
-library(_______)
-municipalities <-  getData(__________)
+library(geodata)
+municipalities <-  gadm( country = "DNK", path = ".", level = 2)
 municipalities_25832 <- municipalities %>% 
-  st_as_sf(_______)
+  st_as_sf() %>% 
+  st_transform(25832)
 
 
 # Plot the monuments on top of the municipalities
-plot(_________(municipalities_25832))
-plot(_________, add = TRUE, pch = 16, col = "red")
+plot(st_geometry(municipalities_25832))
+plot(viking$geometry, add = TRUE, pch = 16, col = "red")
 ```
 
 Great! The monuments object did not have municipality information until you performed the spatial join with `st_join()`. Now that the municipality information is included you can supply each municipality office with the count and coordinates of monuments they are in charge of so they can monitor and safeguard.
@@ -85,28 +91,29 @@ Importantly, the `st_join()` function requires `sf` data frames as input and wil
 class(viking)
 
 # Join the viking monuments with the municipalities
-viking_neigh <- ________(viking, municipalities_25832)
+viking_neigh <- st_join(viking, municipalities_25832)
 
 # Confirm that viking_neigh has the municipality information
 head(viking_neigh)
 
 # Calculate the count of monuments per municipality
 viking_neigh %>% 
-  group_by(________) %>% 
+  group_by(NAME_2) %>% 
   tally() %>% 
-  arrange(____(__)) 
+  arrange(desc(n)) 
 
 # Create an object with 5 of the least populated municipalities
 least <- viking_neigh %>% 
-  group_by(________) %>% 
+  group_by(NAME_2) %>% 
   tally() %>% 
-  arrange(__) %>%
-  _____(1:5)
-  
+  arrange(n) %>%
+  slice(1:5)
+least  
   
 # Plot the municipalities with fewest Viking finds in red over DK municipalities
-plot(__________, col = "grey", border = "white")
-plot(municipalities_25832[_________(___________(least, municipalities_25832, sparse = FALSE)), ]$geometry, col = "red", add = T) 
+plot(municipalities_25832$geometry, col = "grey", border = "white")
+plot(st_geometry(municipalities_25832 %>% 
+                   filter(NAME_2%in%least$NAME_2)), col = "red", add = T) 
 
 ```
 
@@ -135,43 +142,42 @@ A note about the output of functions that test relationships between two sets of
 
 ```{r intersect, eval=FALSE}
 # Load objects
-parks
 viking
 
-
 # Create a 10km buffer around Nobelparken (see Week 03 Task 01 for guidance) 
-nb <- data.frame(________, _________, ________)
+nb <- df_sf[3,]
+nb
 nb_buf <- nb %>% 
-  st_as_sf(________________, crs = _____) %>% 
-  ______________ %>% 
+  st_transform(25832) %>% 
   st_buffer(10000)
-
+nb_buf
 
 # Check consistent projection among the objects
-________==_________
-________==_________
+st_crs(viking)==st_crs(nb_buf)
 
 # Identify viking monuments that intersect with the buffer
-viking_int <- ___(nb_buf, viking)
+viking_int <- st_intersects(nb_buf, viking)
 
 # Identify parks contained by the buffer
 parks_cont <- ___(nb_buf, parks)
 
 # Get the indexes of the viking monuments and parks contained by the buffer. You are extracting the first element of each list.
-int <- viking_int[[___]]
+int <- viking_int[[1]]
 cont <- parks_cont[[___]]
 
 # Get the IDs or codes of the viking and parks in buffer
-viking$stednavn[____]
+viking$stednavn[int]
 parks$navn[___]
 
 # Clip the viking monuments and parks layers by the buffer (ignore the warning)
-viking_clip <- ___
+viking_clip <- st_intersection(nb_buf, viking)
 parks_clip <- ___
 
 # Plot the geometry of the clipped viking monuments
-plot(nb_buf$geometry, border = "blue")
-plot(parks[cont,], add = TRUE, col = "yellow")
+
+plot(nb_buf$geometry, col = "yellow",  border = "blue")
+plotRGB(aarhus, add = T)
+#plot(parks[cont,], add = TRUE, col = "yellow")
 plot(st_geometry(viking_clip), col = "red", add = TRUE, pch = 19)
 
 ```
