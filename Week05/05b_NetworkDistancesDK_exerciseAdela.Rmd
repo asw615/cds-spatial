@@ -106,8 +106,9 @@ R users looking for free batch-geocoding solutions should use other packages lik
 Let’s use `mb_geocode()` to identify the coordinates representing the Aarhus University Nobelparken campus.
 
 ```{r geocode}
-nobel <- mb_geocode("Nobelparken, Jens Chr.Skous Vej 5, Aarhus, 8000, Denmark ")
+nobel <- mb_geocode("Jens Chr. Skous Vej 5, Aarhus N, Denmark ")
 nobel
+
 ```
 By default, `mb_geocode()` returns a length-2 vector representing the longitude and latitude coordinates of the geocoded location. The function can also return an sf POINT object or an R list representing the full API response, if requested. Using the returned coordinates, we can focus our Leaflet Mapbox map with the `setView()` function:
 ```{r mapbox-nobel}
@@ -143,8 +144,8 @@ Creating and visualizing isochrones is beautifully straightforward with the `mb_
 
 Let’s try drawing isochrones around the Nobelparken. `mb_isochrone()` accepts an an input a coordinate pair, a location description as a character string, or an sf object. We can use our `nobel` object here to initialize the isochrones around campus.
 ```{r nobel-drive}
-nobel_iso_drive <- ______________(nobel,
-                                 profile = "__________",
+nobel_iso_drive <- mb_isochrone(nobel,
+                                 profile = "driving",
                                  time = c(4, 8, 12))
 
 nobel_iso_drive
@@ -182,10 +183,11 @@ leaflet() %>%
 mapboxapi can also be used to quickly represent and visualize routes between two locations, or alternatively along multiple locations. At its simplest, however, `mb_directions()` just requires an origin and a destination:
 
 ```{r route-moesgaard}
-route <- ____________(origin = nobel,
-                       destination = "Moesgaard Museum, Aarhus, Denmark",
-                       profile = "____________")
-
+route <- mb_directions(origin = nobel,
+                       destination = c(10.222426021218107,
+                                       56.091501015374654), # "Moesgaard Museum, Højbjerg, Denmark",
+                       profile = "cycling")
+?mb_directions()
 route
 
 mapbox_map %>%
@@ -248,8 +250,8 @@ library(mapboxapi)
 
 isos <- mb_isochrone(
   location = " Palle Juul-Jensens Blvd. 161, 8200 Aarhus",
-  profile = "____________",
-  time = ________
+  profile = "driving",
+  time = 1:45
 )
 
 ```
@@ -285,16 +287,17 @@ To make continuation easier and save on the API calls.
 To generate the accessibility surface raster, we will need to apply a *coordinate system transformation* to “project” our data to two-dimensional coordinates. This will allow us to specify the raster’s resolution in meters. We generate a 100m resolution raster, and use the `rasterize()` function in `terra` to allocate the minimum overlapping value from our isochrones to each grid cell. The result can then be mapped with Leaflet’s `addRasterImage()` function.
 
 ```{r rasterize-isochrones, eval = FALSE}
-# library(terra)
+library(terra)
 
 # Transform 'isos' to 25832
-isos_proj <- project(isos, "EPSG:25832")
+library(sf)
+isos_proj <- st_transform(isos, crs = 25832)
 
 # Create a RasterLayer (SpatRaster in terra) with the specified resolution of 100m
-template <- _____(isos_proj, resolution = 100)
+template <- rast(isos_proj, resolution = 100)
 
 # Use the rasterize function from terra, specifying the field and aggregation function
-iso_surface <- _________(isos_proj, template, field = "time", fun = min, background=NA)
+iso_surface <- rasterize(isos_proj, template, field = "time", fun = min, background=NA)
 
 # Color mapping setup using terra (you may need to install 'viridis' for color palettes)
 library(viridis)
@@ -375,7 +378,7 @@ oc_config()
 Now you are ready to turn place names into latitude and longitude coordinates:
 ```{r geocode-openc}
 library(opencage)
-b <- oc_forward_df(placename = "Regionshospitalet Grenaa in Grenaa", countrycode = "DK")
+b <- oc_forward_df(placename = "Regionshospitalet Grenaa in Grenaa", countrycode = "DK", limit = 3)
 leaflet() %>% 
   addTiles() %>% 
   addMarkers(b$oc_lng, b$oc_lat)
@@ -389,7 +392,7 @@ hospitals <- c("Regionshospitalet Brædstrup in Brædstrup","Regionshospitalet G
 
 Batch-geocode!
 ```{r geocode-h, eval=FALSE}
-h <- oc_forward_df(placename = hospitals, countrycode = "DK", limit =1, no_annotations = TRUE)
+h <- oc_forward_df(placename = hospitals, countrycode = "DK", limit = 1, no_annotations = TRUE)
 
 # Look at the object
 h
@@ -418,7 +421,7 @@ Let's convert the tibble to an sf POINT object. This dataset can be used to anal
 
 ```{r isochrones-h, eval = FALSE}
 # Convert to sf object (only complete coordinates will work)
-
+h[17,]
 h_sf <- st_as_sf(h[-17,], coords = c("oc_lng", "oc_lat"), crs = 4326) #%>% 
 #  st_transform(crs = 25832)
 
@@ -426,19 +429,24 @@ h_sf <- st_as_sf(h[-17,], coords = c("oc_lng", "oc_lat"), crs = 4326) #%>%
 # Walking range 20 mins
 walking_isos <- mb_isochrone(
   h_sf,
-  profile = ________,
-  time = _______,
+  profile = "walking",
+  time = 20,
   id = "placename"
 )
 
 # Cycling range
 cycling_isos <- mb_isochrone(
-  ____
+   h_sf,
+  profile = "cycling",
+  time = 20,
+  id = "placename"
   )
 
 # Driving range
-driving_isos <- mb_isochrone(
-  _____
+driving_isos <- mb_isochrone( h_sf,
+  profile = "driving",
+  time = 20,
+  id = "placename"
 )
 ```
 
@@ -447,7 +455,9 @@ These results can be visualized on our Mapbox map:
 
 ```{r map-isos, eval = FALSE}
 mapbox_map %>%
-  ________
+  addPolygons(data = driving_isos) %>% 
+  addPolygons(data = cycling_isos) %>% 
+  addPolygons(data = walking_isos)
 
 ```
 
